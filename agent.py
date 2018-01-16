@@ -6,8 +6,15 @@ from move import Move
 class Agent:
     global target_food
     global own_head
+    global runs
+    global points
+    global scorenow
+    global time
     own_head=[]
+    runs = 0
+    points = 0
     target_food=[]
+    time=5
     def get_move(self, board, score, turns_alive, turns_to_starve, direction):
         """This function behaves as the 'brain' of the snake. You only need to change the code in this function for
         the project. Every turn the agent needs to return a move. This move will be executed by the snake. If this
@@ -43,16 +50,21 @@ class Agent:
         Move.LEFT and Move.RIGHT changes the direction of the snake. In example, if the snake is facing north and the
         move left is made, the snake will go one block to the left and change its direction to west.
         """
+        global scorenow
         global own_head
         global target_food
+        global time
+        scorenow=score
+
         coordinates=[]
 
         """find food and head or take them from the global variables"""
         if (len(own_head)<1 and len(target_food)<1) \
-                or ( len(own_head)>0 and own_head[0]==target_food[0] and own_head[1]==target_food[1] ) or 1==1:
+                or ( len(own_head)>0 and own_head[0]==target_food[0] and own_head[1]==target_food[1] ) or time == 0:
             coordinates=locate_food(board,0)
             own_head = coordinates[:2]
             target_food = coordinates[2:]
+            time=1
         else:
             coordinates=list(own_head)
             coordinates.append(target_food[0])
@@ -68,7 +80,7 @@ class Agent:
 
         """update the snake's head location"""
         self.update_location(direction, own_head, result)
-
+        time-=1
 
         return result
 
@@ -83,6 +95,7 @@ class Agent:
                 result = Move.RIGHT
             elif desision == Direction.SOUTH:
                 """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
+                # I want it to go to the biggest open space and slither through it
                 result = Move.RIGHT
             elif desision == Direction.WEST:
                 """print("Goal is to the left")"""
@@ -94,6 +107,7 @@ class Agent:
                 result = Move.RIGHT
             elif desision == Direction.WEST:
                 """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
+                # I want it to go to the biggest open space and slither through it
                 result = Move.RIGHT
             elif desision == Direction.NORTH:
                 """print("Goal is to the left")"""
@@ -105,6 +119,7 @@ class Agent:
                 result = Move.RIGHT
             elif desision == Direction.NORTH:
                 """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
+                # I want it to go to the biggest open space and slither through it
                 result = Move.RIGHT
             elif desision == Direction.EAST:
                 """print("Goal is to the left")"""
@@ -116,6 +131,7 @@ class Agent:
                 result = Move.RIGHT
             elif desision == Direction.EAST:
                 """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
+                # I want it to go to the biggest open space and slither through it
                 result = Move.RIGHT
             elif desision == Direction.SOUTH:
                 """print("Goal is to the left")"""
@@ -170,8 +186,17 @@ class Agent:
         print('noob')
         global own_head
         global target_food
+        global points
+        global runs
+        global scorenow
+        print("own head:",own_head,"\ntarget food:",target_food)
         target_food=[]
         own_head = []
+        runs+=1
+        points+=scorenow
+        scorenow = 0
+        print("this is the ",runs," th run.\nAverage points:",points/runs)
+
         pass
 
 def locate_food(board,indicator):
@@ -181,10 +206,8 @@ def locate_food(board,indicator):
     foodx=[]
     foody=[]
     """find all food and the head of the snek"""
-    x=0
-    while x < len(board):
-        y=0
-        while y < len(board[x]):
+    for x in range(len(board)):
+        for y in range(len(board)):
             if board[x][y] == GameObject.SNAKE_HEAD:
                 snakex=x
                 snakey=y
@@ -203,15 +226,6 @@ def locate_food(board,indicator):
             chosenfood=i
             distance= curdistance
 
-    if indicator == 1:
-        print("!!!!!!!!!!!TODO!!!!!!!!!")
-        final_food=0
-        for i in range(len(foodx)):
-            curdistance = abs(foodx[i] - snakex) + abs(foody[i] - snakey)
-            if curdistance < distance and i != chosenfood:
-                final_food = i
-                distance = curdistance
-        return [snakex, snakey, foodx[final_food], foody[final_food]]
     return [snakex,snakey,foodx[chosenfood],foody[chosenfood]]
 
 def a_star_search(board,coordinates,direction):
@@ -285,7 +299,7 @@ def a_star_search(board,coordinates,direction):
         currentNode=queue.pop(0)
         # print (currentNode)
         # check the north:
-        if currentNode[1]-1 > 0 \
+        if currentNode[1]-1 >= 0 \
             and (board[currentNode[0]][currentNode[1]-1] == GameObject.EMPTY
                        or board[currentNode[0]][currentNode[1]-1] == GameObject.FOOD) \
             and not checked.__contains__([currentNode[0],currentNode[1]-1]):
@@ -333,7 +347,7 @@ def a_star_search(board,coordinates,direction):
                 queue.append([currentNode[0],currentNode[1]+1,value,currentNode[3],currentNode[4]+1])
 
         # check the west
-        if currentNode[0]-1 > 0 \
+        if currentNode[0]-1 >= 0 \
             and (board[currentNode[0]-1][currentNode[1]] == GameObject.EMPTY
                        or board[currentNode[0]-1][currentNode[1]] == GameObject.FOOD) \
             and not checked.__contains__([currentNode[0]-1,currentNode[1]]):
@@ -350,9 +364,17 @@ def a_star_search(board,coordinates,direction):
 
 
     # print(queue)
-
+    global own_head
     if len(queue) < 1:
-        """print("no availible nodes")"""
+        # print("no availible nodes")
+        if own_head[1]>1 and board[own_head[0]][own_head[1]-1] == GameObject.EMPTY :
+            return Direction.NORTH
+        if own_head[1]+1<len(board) and board[own_head[0]][own_head[1]+1] == GameObject.EMPTY :
+            return Direction.SOUTH
+        if own_head[0]>1 and board[own_head[0]-1][own_head[1]] == GameObject.EMPTY :
+            return Direction.WEST
+        if own_head[0]+1<len(board) and board[own_head[0]+1][own_head[1]] == GameObject.EMPTY :
+            return Direction.EAST
         return Direction.NORTH
     return queue[0][3]
 

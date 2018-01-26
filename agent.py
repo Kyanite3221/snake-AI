@@ -80,9 +80,8 @@ class Agent:
 
 
         """first two are for the snake, the other two are for the nearest food"""
-        """print('snake head is on',coordinates[0],',',coordinates[1],'\nnearest Food',coordinates[2],',',coordinates[3])
-"""
-        desision = a_star_search(board, coordinates, direction)
+
+        desision = self.a_star_search(board, coordinates, direction)
 
         result = self.determine_direction(desision, direction)
 
@@ -189,6 +188,8 @@ class Agent:
             elif direction == Direction.WEST:
                 """moving North next"""
                 own_head[1] -= 1
+    def can_route_to_tail(self,banana, direction):
+        return True
 
     def on_die(self):
         """This function will be called whenever the snake dies. After its dead the snake will be reincarnated into a
@@ -211,6 +212,167 @@ class Agent:
         print("this is the ",runs," th run.\nAverage points:",points/runs)
 
         pass
+
+    def a_star_search(self,board, coordinates, direction):
+        checked = []
+        queue = []
+        """expand the head node of the snake"""
+        if coordinates[0] + 1 < len(board) \
+                and (board[coordinates[0] + 1][coordinates[1]] == GameObject.EMPTY
+                     or board[coordinates[0] + 1][coordinates[1]] == GameObject.FOOD) and self.can_route_to_tail(
+            (coordinates[0] + 1, coordinates[1]), Direction.EAST):
+            queue.append([coordinates[0] + 1, coordinates[1],
+                          h([coordinates[0] + 1, coordinates[1]], [coordinates[2], coordinates[3]]), Direction.EAST, 1])
+            checked.append([coordinates[0] + 1, coordinates[1]])
+        """east"""
+
+        if coordinates[1] + 1 < len(board) and (board[coordinates[0]][coordinates[1] + 1] == GameObject.EMPTY
+                                                or board[coordinates[0]][
+                    coordinates[1] + 1] == GameObject.FOOD) and self.can_route_to_tail((coordinates[0] + 1, coordinates[1]),
+                                                                                  Direction.SOUTH):
+            heur = h([coordinates[0], coordinates[1] + 1], [coordinates[2], coordinates[3]])
+            if len(queue) > 0 and heur < queue[0][2]:
+                queue.insert(0, [coordinates[0], coordinates[1] + 1,
+                                 heur, Direction.SOUTH, 1])
+            else:
+                counter = 0
+                while counter < len(queue) and heur > queue[counter][2]:
+                    counter += 1
+                if counter < len(queue):
+                    queue.insert(counter, [coordinates[0], coordinates[1] + 1, heur, Direction.SOUTH, 1])
+                else:
+                    queue.append([coordinates[0], coordinates[1] + 1, heur, Direction.SOUTH, 1])
+                    """South"""
+            checked.append([coordinates[0], coordinates[1] + 1])
+
+        if coordinates[0] - 1 >= 0 and (board[coordinates[0] - 1][coordinates[1]] == GameObject.EMPTY
+                                        or board[coordinates[0] - 1][
+                coordinates[1]] == GameObject.FOOD) and self.can_route_to_tail((coordinates[0] + 1, coordinates[1]),
+                                                                          Direction.WEST):
+            heur = h([coordinates[0] - 1, coordinates[1]], [coordinates[2], coordinates[3]])
+            if len(queue) > 0 and heur < queue[0][2]:
+                queue.insert(0, [coordinates[0] - 1, coordinates[1],
+                                 heur, Direction.WEST, 1])
+            else:
+                counter = 1
+                while counter < len(queue) and heur > queue[counter][2]:
+                    counter += 1
+                if counter < len(queue):
+                    queue.insert(counter, [coordinates[0] - 1, coordinates[1], heur, Direction.WEST, 1])
+                else:
+                    queue.append([coordinates[0] - 1, coordinates[1], heur, Direction.WEST, 1])
+                    """West"""
+            checked.append([coordinates[0] - 1, coordinates[1]])
+
+        if coordinates[1] - 1 >= 0 and (board[coordinates[0]][coordinates[1] - 1] == GameObject.EMPTY
+                                        or board[coordinates[0]][
+                    coordinates[1] - 1] == GameObject.FOOD) and self.can_route_to_tail((coordinates[0] + 1, coordinates[1]),
+                                                                                  Direction.NORTH):
+            heur = h([coordinates[0], coordinates[1] - 1], [coordinates[2], coordinates[3]])
+            if len(queue) > 0 and heur < queue[0][2]:
+                queue.insert(0, [coordinates[0], coordinates[1] - 1,
+                                 heur, Direction.NORTH, 1])
+            else:
+                counter = 1
+                while counter < len(queue) and heur > queue[counter][2]:
+                    counter += 1
+                if counter < len(queue):
+                    queue.insert(counter, [coordinates[0], coordinates[1] - 1, heur, Direction.NORTH, 1])
+                else:
+                    queue.append([coordinates[0], coordinates[1] - 1, heur, Direction.NORTH, 1])
+                    """North"""
+            checked.append([coordinates[0], coordinates[1] - 1])
+
+        """first nodes expanded"""
+        # print(node_depth," node level expanded:", queue)
+
+
+        """This is where the true a* part comes into play"""
+        while len(queue) > 0 and board[queue[0][0]][queue[0][1]] != GameObject.FOOD:
+            currentNode = queue.pop(0)
+            # print (currentNode)
+            # check the north:
+            if currentNode[1] - 1 >= 0 \
+                    and (board[currentNode[0]][currentNode[1] - 1] == GameObject.EMPTY
+                         or board[currentNode[0]][currentNode[1] - 1] == GameObject.FOOD) \
+                    and not checked.__contains__([currentNode[0], currentNode[1] - 1]):
+                checked.append([currentNode[0], currentNode[1] - 1])
+                # print(checked)
+                value = f([currentNode[0], currentNode[1] - 1], coordinates[2:4], currentNode[4])
+                counter = 0
+                while counter < len(queue) and value > queue[counter][2]:
+                    counter += 1
+                if counter < len(queue):
+                    queue.insert(counter,
+                                 [currentNode[0], currentNode[1] - 1, value, currentNode[3], currentNode[4] + 1])
+                else:
+                    queue.append([currentNode[0], currentNode[1] - 1, value, currentNode[3], currentNode[4] + 1])
+
+            # check the east
+            if currentNode[0] + 1 < len(board) \
+                    and (board[currentNode[0] + 1][currentNode[1]] == GameObject.EMPTY
+                         or board[currentNode[0] + 1][currentNode[1]] == GameObject.FOOD) \
+                    and not checked.__contains__([currentNode[0] + 1, currentNode[1]]):
+                checked.append([currentNode[0] + 1, currentNode[1]])
+                # print(checked)
+                value = f([currentNode[0] + 1, currentNode[1]], coordinates[2:4], currentNode[4])
+                counter = 0
+                while counter < len(queue) and value > queue[counter][2]:
+                    counter += 1
+                if counter < len(queue):
+                    queue.insert(counter,
+                                 [currentNode[0] + 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
+                else:
+                    queue.append([currentNode[0] + 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
+
+            # check the south
+            if currentNode[1] + 1 < len(board) \
+                    and (board[currentNode[0]][currentNode[1] + 1] == GameObject.EMPTY
+                         or board[currentNode[0]][currentNode[1] + 1] == GameObject.FOOD) \
+                    and not checked.__contains__([currentNode[0], currentNode[1] + 1]):
+                checked.append([currentNode[0], currentNode[1] + 1])
+                # print(checked)
+                value = f([currentNode[0], currentNode[1] + 1], coordinates[2:4], currentNode[4])
+                counter = 0
+                while counter < len(queue) and value > queue[counter][2]:
+                    counter += 1
+                if counter < len(queue):
+                    queue.insert(counter,
+                                 [currentNode[0], currentNode[1] + 1, value, currentNode[3], currentNode[4] + 1])
+                else:
+                    queue.append([currentNode[0], currentNode[1] + 1, value, currentNode[3], currentNode[4] + 1])
+
+            # check the west
+            if currentNode[0] - 1 >= 0 \
+                    and (board[currentNode[0] - 1][currentNode[1]] == GameObject.EMPTY
+                         or board[currentNode[0] - 1][currentNode[1]] == GameObject.FOOD) \
+                    and not checked.__contains__([currentNode[0] - 1, currentNode[1]]):
+                checked.append([currentNode[0] - 1, currentNode[1]])
+                # print(checked)
+                value = f([currentNode[0] - 1, currentNode[1]], coordinates[2:4], currentNode[4])
+                counter = 0
+                while counter < len(queue) and value > queue[counter][2]:
+                    counter += 1
+                if counter < len(queue):
+                    queue.insert(counter,
+                                 [currentNode[0] - 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
+                else:
+                    queue.append([currentNode[0] - 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
+
+        # print(queue)
+        global own_head
+        if len(queue) < 1:
+            # print("no availible nodes")
+            if own_head[1] > 1 and board[own_head[0]][own_head[1] - 1] == GameObject.EMPTY:
+                return Direction.NORTH
+            if own_head[1] + 1 < len(board) and board[own_head[0]][own_head[1] + 1] == GameObject.EMPTY:
+                return Direction.SOUTH
+            if own_head[0] > 1 and board[own_head[0] - 1][own_head[1]] == GameObject.EMPTY:
+                return Direction.WEST
+            if own_head[0] + 1 < len(board) and board[own_head[0] + 1][own_head[1]] == GameObject.EMPTY:
+                return Direction.EAST
+            return Direction.NORTH
+        return queue[0][3]
 
 def locate_food(board,indicator):
     """here I determine where the nearest food is"""
@@ -241,155 +403,7 @@ def locate_food(board,indicator):
 
     return [snakex,snakey,foodx[chosenfood],foody[chosenfood]]
 
-def a_star_search(board,coordinates,direction):
-    checked=[]
-    queue=[]
-    """expand the head node of the snake"""
-    if coordinates[0]+1 < len(board) \
-            and (board[coordinates[0]+1][coordinates[1]] == GameObject.EMPTY
-                 or board[coordinates[0]+1][coordinates[1]] == GameObject.FOOD):
-        queue.append([coordinates[0]+1,coordinates[1],h([coordinates[0]+1,coordinates[1]],[coordinates[2],coordinates[3]]), Direction.EAST,1])
-        checked.append([coordinates[0]+1,coordinates[1]])
-    """east"""
 
-    if coordinates[1] + 1 < len(board)and (board[coordinates[0]][coordinates[1]+1] == GameObject.EMPTY
-                 or board[coordinates[0]][coordinates[1]+1] == GameObject.FOOD):
-        heur = h([coordinates[0],coordinates[1]+1],[coordinates[2],coordinates[3]])
-        if len(queue)>0 and heur < queue[0][2]:
-            queue.insert(0,[coordinates[0], coordinates[1] + 1,
-                          heur, Direction.SOUTH,1])
-        else:
-            counter = 0
-            while counter<len(queue) and heur > queue[counter][2]:
-                counter+=1
-            if counter<len(queue):
-                queue.insert(counter, [coordinates[0], coordinates[1] + 1, heur, Direction.SOUTH,1])
-            else:
-                queue.append([coordinates[0], coordinates[1] + 1, heur, Direction.SOUTH,1])
-                """South"""
-        checked.append([coordinates[0], coordinates[1] + 1])
-
-    if coordinates[0] - 1 >= 0 and (board[coordinates[0]-1][coordinates[1]] == GameObject.EMPTY
-                 or board[coordinates[0]-1][coordinates[1]] == GameObject.FOOD):
-        heur = h([coordinates[0] - 1, coordinates[1]], [coordinates[2], coordinates[3]])
-        if len(queue)>0 and heur < queue[0][2]:
-            queue.insert(0,[coordinates[0] - 1, coordinates[1],
-                           heur, Direction.WEST,1])
-        else:
-            counter = 1
-            while counter < len(queue) and heur > queue[counter][2]:
-                counter += 1
-            if counter < len(queue):
-                queue.insert(counter, [coordinates[0] - 1, coordinates[1], heur, Direction.WEST,1])
-            else:
-                queue.append([coordinates[0] - 1, coordinates[1], heur, Direction.WEST,1])
-                """West"""
-        checked.append([coordinates[0] - 1, coordinates[1]])
-
-    if coordinates[1] - 1 >= 0 and (board[coordinates[0]][coordinates[1]-1] == GameObject.EMPTY
-                 or board[coordinates[0]][coordinates[1]-1] == GameObject.FOOD):
-        heur = h([coordinates[0], coordinates[1] - 1],[ coordinates[2], coordinates[3]])
-        if len(queue)>0 and heur < queue[0][2]:
-            queue.insert(0,[coordinates[0], coordinates[1] - 1,
-                           heur, Direction.NORTH,1])
-        else:
-            counter = 1
-            while counter < len(queue) and heur > queue[counter][2]:
-                counter += 1
-            if counter < len(queue):
-                queue.insert(counter, [coordinates[0], coordinates[1] - 1, heur, Direction.NORTH,1])
-            else:
-                queue.append([coordinates[0], coordinates[1] - 1, heur, Direction.NORTH,1])
-                """North"""
-        checked.append([coordinates[0], coordinates[1] - 1])
-
-    """first nodes expanded"""
-    """print(node_depth," node level expanded:", queue)"""
-
-
-    """This is where the true a* part comes into play"""
-    while len(queue)>0 and board[queue[0][0]][queue[0][1]] != GameObject.FOOD:
-        currentNode=queue.pop(0)
-        # print (currentNode)
-        # check the north:
-        if currentNode[1]-1 >= 0 \
-            and (board[currentNode[0]][currentNode[1]-1] == GameObject.EMPTY
-                       or board[currentNode[0]][currentNode[1]-1] == GameObject.FOOD) \
-            and not checked.__contains__([currentNode[0],currentNode[1]-1]):
-            checked.append([currentNode[0],currentNode[1]-1])
-            # print(checked)
-            value = f([currentNode[0],currentNode[1]-1],coordinates[2:4],currentNode[4])
-            counter = 0
-            while counter < len(queue) and value > queue[counter][2]:
-                counter += 1
-            if counter < len(queue):
-                queue.insert(counter,[currentNode[0],currentNode[1]-1,value,currentNode[3],currentNode[4]+1])
-            else:
-                queue.append([currentNode[0],currentNode[1]-1,value,currentNode[3],currentNode[4]+1])
-
-        # check the east
-        if currentNode[0]+1 <len(board) \
-            and (board[currentNode[0]+1][currentNode[1]] == GameObject.EMPTY
-                       or board[currentNode[0]+1][currentNode[1]] == GameObject.FOOD) \
-            and not checked.__contains__([currentNode[0]+1,currentNode[1]]):
-            checked.append([currentNode[0]+1,currentNode[1]])
-            # print(checked)
-            value = f([currentNode[0]+1,currentNode[1]],coordinates[2:4],currentNode[4])
-            counter = 0
-            while counter < len(queue) and value > queue[counter][2]:
-                counter += 1
-            if counter < len(queue):
-                queue.insert(counter,[currentNode[0]+1,currentNode[1],value,currentNode[3],currentNode[4]+1])
-            else:
-                queue.append([currentNode[0]+1,currentNode[1],value,currentNode[3],currentNode[4]+1])
-
-        # check the south
-        if currentNode[1]+1 < len(board) \
-            and (board[currentNode[0]][currentNode[1]+1] == GameObject.EMPTY
-                       or board[currentNode[0]][currentNode[1]+1] == GameObject.FOOD) \
-            and not checked.__contains__([currentNode[0],currentNode[1]+1]):
-            checked.append([currentNode[0],currentNode[1]+1])
-            # print(checked)
-            value = f([currentNode[0],currentNode[1]+1],coordinates[2:4],currentNode[4])
-            counter = 0
-            while counter < len(queue) and value > queue[counter][2]:
-                counter += 1
-            if counter < len(queue):
-                queue.insert(counter,[currentNode[0],currentNode[1]+1,value,currentNode[3],currentNode[4]+1])
-            else:
-                queue.append([currentNode[0],currentNode[1]+1,value,currentNode[3],currentNode[4]+1])
-
-        # check the west
-        if currentNode[0]-1 >= 0 \
-            and (board[currentNode[0]-1][currentNode[1]] == GameObject.EMPTY
-                       or board[currentNode[0]-1][currentNode[1]] == GameObject.FOOD) \
-            and not checked.__contains__([currentNode[0]-1,currentNode[1]]):
-            checked.append([currentNode[0]-1,currentNode[1]])
-            # print(checked)
-            value = f([currentNode[0]-1,currentNode[1]],coordinates[2:4],currentNode[4])
-            counter = 0
-            while counter < len(queue) and value > queue[counter][2]:
-                counter += 1
-            if counter < len(queue):
-                queue.insert(counter,[currentNode[0]-1,currentNode[1],value,currentNode[3],currentNode[4]+1])
-            else:
-                queue.append([currentNode[0]-1,currentNode[1],value,currentNode[3],currentNode[4]+1])
-
-
-    # print(queue)
-    global own_head
-    if len(queue) < 1:
-        # print("no availible nodes")
-        if own_head[1]>1 and board[own_head[0]][own_head[1]-1] == GameObject.EMPTY :
-            return Direction.NORTH
-        if own_head[1]+1<len(board) and board[own_head[0]][own_head[1]+1] == GameObject.EMPTY :
-            return Direction.SOUTH
-        if own_head[0]>1 and board[own_head[0]-1][own_head[1]] == GameObject.EMPTY :
-            return Direction.WEST
-        if own_head[0]+1<len(board) and board[own_head[0]+1][own_head[1]] == GameObject.EMPTY :
-            return Direction.EAST
-        return Direction.NORTH
-    return queue[0][3]
 
 def h(node,goal):
     """print("recieved node:",node[0],",",node[1],"\nand goal:",goal[0],",",goal[1])"""

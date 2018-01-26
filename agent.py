@@ -4,6 +4,10 @@ from move import Move
 
 
 class Agent:
+    def __init__(self):
+        self.head_position = None
+        self.snake_body = []
+
     global target_food
     global own_head
     global runs
@@ -56,6 +60,10 @@ class Agent:
         global time
         scorenow=score
 
+        if (self.head_position == None):
+            self.head_position = self.find_head(board)
+            self.snake_body.insert(0, self.head_position)
+
         coordinates=[]
 
         """find food and head or take them from the global variables"""
@@ -81,6 +89,11 @@ class Agent:
         """update the snake's head location"""
         self.update_location(direction, own_head, result)
         time-=1
+
+        self.head_position = (own_head[0], own_head[1])
+        self.snake_body.insert(0, self.head_position)
+        if (not board[own_head[x]][own_head[y]] == GameObject.FOOD):
+            del self.snake_body[-1]
 
         return result
 
@@ -385,3 +398,75 @@ def h(node,goal):
     return total
 def f(node,goal,previous_cost):
     return h(node,goal)+previous_cost
+
+###############################THOMAS METHODS
+
+    def find_head(self, board):
+        for (i, x) in enumerate(board):
+            if (GameObject.SNAKE_HEAD in x):
+                return (i, x.index(GameObject.SNAKE_HEAD))
+
+        return (-1, -1)
+
+    def can_route_to_tail(self, position, direction, board):
+        open_set = [position]
+        closed_set = []
+
+        parent_of = dict()
+        cost_to = dict()
+        cost_to_goal_through = dict()
+
+        cost_to[position] = 0
+        cost_to_goal_through[position] = self.estimate_heuristic(position, goal)
+        parent_of[position] = (None, direction)
+
+        while (len(open_set) > 0):
+            d = {k:v for k, v in cost_to_goal_through.items() if k in open_set}
+            parent_state = min(d, key=d.get)
+            parent_direction = parent_of[parent_state][1]
+
+            if (parent_state == goal):
+                direction_to_goal = parent_of[goal][1]
+                path_to_goal = [(goal, direction_to_goal)]
+
+                while (not position == parent_of[path_to_goal[0][0]][0]):
+                    parent_node = parent_of[path_to_goal[0][0]][0]
+                    direction_to_parent = parent_of[parent_node][1]
+                    path_to_goal.insert(0, (parent_node, direction_to_parent))
+
+                return path_to_goal
+
+            open_set.remove(parent_state)
+            closed_set.insert(-1, parent_state)
+
+            for (child_state, child_direction) in self.get_children(parent_state, board, parent_direction):
+                if child_state in closed_set:
+                    continue
+                if child_state not in open_set:
+                    open_set.insert(-1, child_state)
+
+                tentative_cost = cost_to[parent_state] + 1
+                if (child_state in cost_to and tentative_cost >= cost_to[child_state]):
+                    continue
+
+                parent_of[child_state] = (parent_state, child_direction)
+                cost_to[child_state] = tentative_cost
+                cost_to_goal_through[child_state] = tentative_cost + self.estimate_heuristic(child_state, goal)
+
+        """failure"""
+        return None
+
+    def get_children(self, parent_state, board, direction):
+        children = []
+
+        for move in direction.get_xy_moves():
+            child_state = tuple(map(sum, zip(parent_state, move))) #sum of two tuples	
+            (x, y) = child_state
+            if (not x in range(0, len(board)) or not y in range(0, len(board[0]))):
+                continue
+
+            game_object = board[x][y]
+            if (not game_object == GameObject.WALL and not child_state in self.snake_body):
+                children.insert(-1, (child_state, self.xy_to_direction(move)))
+
+        return children

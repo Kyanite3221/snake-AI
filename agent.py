@@ -1,25 +1,16 @@
 from gameobjects import GameObject
-from move import Direction
-from move import Move
-
+from move import Move, Direction
 from time import sleep
 
 class Agent:
     def __init__(self):
+        self.calculated_path = []
         self.head_position = None
         self.snake_body = []
+        self.scores = [0]
+        self.default_ttl = 1000
+        self.ttl = 1000
 
-    global target_food
-    global own_head
-    global runs
-    global points
-    global scorenow
-    global time
-    own_head=[]
-    runs = 0
-    points = 0
-    target_food=[]
-    time=5
     def get_move(self, board, score, turns_alive, turns_to_starve, direction):
         """This function behaves as the 'brain' of the snake. You only need to change the code in this function for
         the project. Every turn the agent needs to return a move. This move will be executed by the snake. If this
@@ -55,63 +46,49 @@ class Agent:
         Move.LEFT and Move.RIGHT changes the direction of the snake. In example, if the snake is facing north and the
         move left is made, the snake will go one block to the left and change its direction to west.
         """
-        global scorenow
-        global own_head
-        global target_food
-        global time
-        scorenow=score
+
+        self.scores[0] = score
 
         if (self.head_position == None):
             self.head_position = self.find_head(board)
             self.snake_body.insert(0, self.head_position)
 
-        coordinates=[]
+        if len(self.calculated_path) < 1:
+            #tail_position = board.snake.body_parts[-1]
+            ordered_food_list = sorted(self.locate_food(board), key=lambda location: self.estimate_heuristic(location, self.head_position))
+            for food_location in ordered_food_list:
+                calculated_path = self.calculate_path(self.head_position, food_location, board, direction, True)
+                if not calculated_path == None:
+                    self.calculated_path = calculated_path
+                    break
 
-        """find food and head or take them from the global variables"""
-        if (len(own_head)<1 and len(target_food)<1) \
-                or ( len(own_head)>0 and own_head[0]==target_food[0] and own_head[1]==target_food[1] ) or time == 0:
-            coordinates=locate_food(board,0)
-            own_head = coordinates[:2]
-            target_food = coordinates[2:]
-            time=1
-        else:
-            coordinates=list(own_head)
-            coordinates.append(target_food[0])
-            coordinates.append(target_food[1])
+        if len(self.calculated_path) < 1:
+            tail_location = self.snake_body[-1]
+            calculated_path = self.calculate_path(self.head_position, tail_location, board, direction, False)
+            if not calculated_path == None:
+                self.calculated_path = calculated_path
 
+        if (len(self.calculated_path) < 1):
+            self.calculated_path = [self.get_surviving_move(board, self.head_position, direction)]
 
-        """first two are for the snake, the other two are for the nearest food"""
+        next_step = self.calculated_path[0][1]
+        self.head_position = self.calculated_path[0][0]
+        del self.calculated_path[0]
 
-        desision = self.a_star_search(board, coordinates, direction)
-
-        result = self.determine_direction(desision, direction)
-
-        """update the snake's head location"""
-        self.update_location(direction, own_head, result)
-        time-=1
-
-        self.head_position = (own_head[0], own_head[1])
         self.snake_body.insert(0, self.head_position)
-        if (not board[own_head[0]][own_head[1]] == GameObject.FOOD):
+        (head_x, head_y) = self.head_position
+        if (not board[head_x][head_y] == GameObject.FOOD):
             del self.snake_body[-1]
+            self.ttl -= 1
+        else:
+            self.ttl = self.default_ttl
 
-        return result
+        if self.ttl < 1:
+            return None
 
-###############################THOMAS METHODS
+        return self.move_in_direction(direction, next_step)
 
-    def find_head(self, board):
-        for (i, x) in enumerate(board):
-            if (GameObject.SNAKE_HEAD in x):
-                return (i, x.index(GameObject.SNAKE_HEAD))
-
-        return (-1, -1)
-
-    def can_route_to_tail(self, position, direction, board):
-        if len(self.snake_body) == 1:
-            return True
-
-        goal = self.snake_body[-1]
-
+    def calculate_path(self, position, goal, board, direction, find_food):
         open_set = [position]
         closed_set = []
 
@@ -123,7 +100,7 @@ class Agent:
         cost_to_goal_through[position] = self.estimate_heuristic(position, goal)
         parent_of[position] = (None, direction)
 
-        while (len(open_set) > 0):
+        while (len(open_set) > 0) :
             d = {k:v for k, v in cost_to_goal_through.items() if k in open_set}
             parent_state = min(d, key=d.get)
             parent_direction = parent_of[parent_state][1]
@@ -134,22 +111,27 @@ class Agent:
 
                 while (not position == parent_of[path_to_goal[0][0]][0]):
                     parent_node = parent_of[path_to_goal[0][0]][0]
-                    if (parent_node == None):
+                    if parent_node == None:
                         break
                     direction_to_parent = parent_of[parent_node][1]
                     path_to_goal.insert(0, (parent_node, direction_to_parent))
 
-                return True
+                return [path_to_goal[0]]
 
             open_set.remove(parent_state)
-            closed_set.insert(-1, parent_state) 		
+            closed_set.insert(-1, parent_state)
 
-            for (child_state, child_direction) in self.get_children(parent_state, board, parent_direction):
+            children = self.get_children(parent_state, board, parent_direction)
+            if (find_food and parent_state == position):
+                children = [x for x in children if self.can_reach_tail(x, board)]
+
+            for (child_state, child_direction) in children:
                 if child_state in closed_set:
                     continue
                 if child_state not in open_set:
                     open_set.insert(-1, child_state)
 
+                step_cost = 2 - (child_direction == parent_direction)
                 tentative_cost = cost_to[parent_state] + 1
                 if (child_state in cost_to and tentative_cost >= cost_to[child_state]):
                     continue
@@ -158,16 +140,14 @@ class Agent:
                 cost_to[child_state] = tentative_cost
                 cost_to_goal_through[child_state] = tentative_cost + self.estimate_heuristic(child_state, goal)
 
-
-        print(direction, "can't find tail")
         """failure"""
-        return False
-
+        return None
+    
     def get_children(self, parent_state, board, direction):
         children = []
 
         for move in direction.get_xy_moves():
-            child_state = tuple(map(sum, zip(parent_state, move))) #sum of two tuples	
+            child_state = tuple(map(sum, zip(parent_state, move)))	
             (x, y) = child_state
             if (not x in range(0, len(board)) or not y in range(0, len(board[0]))):
                 continue
@@ -183,105 +163,54 @@ class Agent:
         (x2, y2) = goal
         return abs(x1 - x2) + abs(y1 - y2)
 
+    def move_in_direction(self, current_direction, desired_direction):
+        move_value = desired_direction.value - current_direction.value
+        if (move_value**2 == 9):
+            move_value = -(move_value / 3)
+        elif (move_value**2 == 4):
+            """trying to do illegal move..."""
+            move_value = 0
+        return Move(move_value)
+
     def xy_to_direction(self, xy):
         (x, y) = xy
         direction_value = x**2 * (-x + 2) + y**2 * (y + 1)
         return Direction(direction_value)
 
-############################## end thomas methods
+    def find_head(self, board):
+        for (i, x) in enumerate(board):
+            if (GameObject.SNAKE_HEAD in x):
+                return (i, x.index(GameObject.SNAKE_HEAD))
 
-    def determine_direction(self, desision, direction):
-        if direction == desision:
-            """print("Goal is straight ahead", direction,desision)"""
+        return (-1, -1)
 
-            result = Move.STRAIGHT
-        if direction == Direction.NORTH:
-            if desision == Direction.EAST:
-                """print("Goal is to the right")"""
-                result = Move.RIGHT
-            elif desision == Direction.SOUTH:
-                """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
-                # I want it to go to the biggest open space and slither through it
-                result = Move.RIGHT
-            elif desision == Direction.WEST:
-                """print("Goal is to the left")"""
-                result = Move.LEFT
+    def locate_food(self, board):
+        food_locations = []
+        for x in range(len(board)):
+            for y in range(len(board[x])):
+                if (board[x][y] == GameObject.FOOD):
+                    food_locations.insert(-1, (x, y))
+        return food_locations
 
-        elif direction == Direction.EAST:
-            if desision == Direction.SOUTH:
-                """print("Goal is to the right")"""
-                result = Move.RIGHT
-            elif desision == Direction.WEST:
-                """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
-                # I want it to go to the biggest open space and slither through it
-                result = Move.RIGHT
-            elif desision == Direction.NORTH:
-                """print("Goal is to the left")"""
-                result = Move.LEFT
+    def get_surviving_move(self, board, position, direction):
+        directions = []
+        children = self.get_children(position, board, direction)
+        for child in children:
+            (child_position, child_direction) = child
+            directions.insert(0, child)
 
-        elif direction == Direction.SOUTH:
-            if desision == Direction.WEST:
-                """print("Goal is to the right")"""
-                result = Move.RIGHT
-            elif desision == Direction.NORTH:
-                """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
-                # I want it to go to the biggest open space and slither through it
-                result = Move.RIGHT
-            elif desision == Direction.EAST:
-                """print("Goal is to the left")"""
-                result = Move.LEFT
+        directions.sort()
 
-        elif direction == Direction.WEST:
-            if desision == Direction.NORTH:
-                """print("Goal is to the right")"""
-                result = Move.RIGHT
-            elif desision == Direction.EAST:
-                """print("\n!!!!!!!!!!!!!!!!!NOT YET IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!\n")"""
-                # I want it to go to the biggest open space and slither through it
-                result = Move.RIGHT
-            elif desision == Direction.SOUTH:
-                """print("Goal is to the left")"""
-                result = Move.LEFT
-        return result
+        if len(directions) > 0:
+            return directions[0]
+        else:
+            return ((0,0), Move.STRAIGHT)
 
-    def update_location(self, direction, own_head, result):
-        if result == Move.STRAIGHT:
-            if direction == Direction.NORTH:
-                own_head[1] -= 1
-            elif direction == Direction.EAST:
-                own_head[0] += 1
-            elif direction == Direction.SOUTH:
-                own_head[1] += 1
-            elif direction == Direction.WEST:
-                own_head[0] -= 1
-
-        elif result == Move.LEFT:
-            if direction == Direction.NORTH:
-                """moving West next"""
-                own_head[0] -= 1
-            elif direction == Direction.EAST:
-                """moving North next"""
-                own_head[1] -= 1
-            elif direction == Direction.SOUTH:
-                """moving East next"""
-                own_head[0] += 1
-            elif direction == Direction.WEST:
-                """moving South next"""
-                own_head[1] += 1
-
-        elif result == Move.RIGHT:
-            if direction == Direction.NORTH:
-                """moving East next"""
-                own_head[0] += 1
-            elif direction == Direction.EAST:
-                """moving South next"""
-                own_head[1] += 1
-            elif direction == Direction.SOUTH:
-                """moving West next"""
-                own_head[0] -= 1
-            elif direction == Direction.WEST:
-                """moving North next"""
-                own_head[1] -= 1
+    def can_reach_tail(self, state, board):
+        (position, direction) = state
+        tail = self.snake_body[-1]
+        result = self.calculate_path(position, tail, board, direction, False)
+        return not result == None
 
     def on_die(self):
         """This function will be called whenever the snake dies. After its dead the snake will be reincarnated into a
@@ -289,222 +218,12 @@ class Agent:
         it will be called for a fresh snake. Use this function to clean up variables specific to the life of a single
         snake or to host a funeral.
         """
-        print('noob')
-        global own_head
-        global target_food
-        global points
-        global runs
-        global scorenow
-        print("own head:",own_head,"\ntarget food:",target_food)
-        target_food=[]
-        own_head = []
-        runs+=1
-        points+=scorenow
-        scorenow = 0
-        print("this is the ",runs," th run.\nAverage points:",points/runs)
-
         self.calculated_path = []
         self.head_position = None
         self.snake_body = []
 
-    def a_star_search(self,board, coordinates, direction):
-        checked = []
-        queue = []
-        """expand the head node of the snake"""
-        if coordinates[0] + 1 < len(board) \
-                and (board[coordinates[0] + 1][coordinates[1]] == GameObject.EMPTY
-                     or board[coordinates[0] + 1][coordinates[1]] == GameObject.FOOD) and self.can_route_to_tail(
-            (coordinates[0] + 1, coordinates[1]), Direction.EAST, board):
-            queue.append([coordinates[0] + 1, coordinates[1],
-                          h([coordinates[0] + 1, coordinates[1]], [coordinates[2], coordinates[3]]), Direction.EAST, 1])
-            checked.append([coordinates[0] + 1, coordinates[1]])
-        """east"""
+        self.ttl = self.default_ttl
 
-        if coordinates[1] + 1 < len(board) and (board[coordinates[0]][coordinates[1] + 1] == GameObject.EMPTY
-                                                or board[coordinates[0]][
-                    coordinates[1] + 1] == GameObject.FOOD) and self.can_route_to_tail((coordinates[0], coordinates[1] + 1),
-                                                                                  Direction.SOUTH, board):
-            heur = h([coordinates[0], coordinates[1] + 1], [coordinates[2], coordinates[3]])
-            if len(queue) > 0 and heur < queue[0][2]:
-                queue.insert(0, [coordinates[0], coordinates[1] + 1,
-                                 heur, Direction.SOUTH, 1])
-            else:
-                counter = 0
-                while counter < len(queue) and heur > queue[counter][2]:
-                    counter += 1
-                if counter < len(queue):
-                    queue.insert(counter, [coordinates[0], coordinates[1] + 1, heur, Direction.SOUTH, 1])
-                else:
-                    queue.append([coordinates[0], coordinates[1] + 1, heur, Direction.SOUTH, 1])
-                    """South"""
-            checked.append([coordinates[0], coordinates[1] + 1])
-
-        if coordinates[0] - 1 >= 0 and (board[coordinates[0] - 1][coordinates[1]] == GameObject.EMPTY
-                                        or board[coordinates[0] - 1][
-                coordinates[1]] == GameObject.FOOD) and self.can_route_to_tail((coordinates[0] - 1, coordinates[1]),
-                                                                          Direction.WEST, board):
-            heur = h([coordinates[0] - 1, coordinates[1]], [coordinates[2], coordinates[3]])
-            if len(queue) > 0 and heur < queue[0][2]:
-                queue.insert(0, [coordinates[0] - 1, coordinates[1],
-                                 heur, Direction.WEST, 1])
-            else:
-                counter = 1
-                while counter < len(queue) and heur > queue[counter][2]:
-                    counter += 1
-                if counter < len(queue):
-                    queue.insert(counter, [coordinates[0] - 1, coordinates[1], heur, Direction.WEST, 1])
-                else:
-                    queue.append([coordinates[0] - 1, coordinates[1], heur, Direction.WEST, 1])
-                    """West"""
-            checked.append([coordinates[0] - 1, coordinates[1]])
-
-        if coordinates[1] - 1 >= 0 and (board[coordinates[0]][coordinates[1] - 1] == GameObject.EMPTY
-                                        or board[coordinates[0]][
-                    coordinates[1] - 1] == GameObject.FOOD) and self.can_route_to_tail((coordinates[0], coordinates[1] - 1),
-                                                                                  Direction.NORTH, board):
-            heur = h([coordinates[0], coordinates[1] - 1], [coordinates[2], coordinates[3]])
-            if len(queue) > 0 and heur < queue[0][2]:
-                queue.insert(0, [coordinates[0], coordinates[1] - 1,
-                                 heur, Direction.NORTH, 1])
-            else:
-                counter = 1
-                while counter < len(queue) and heur > queue[counter][2]:
-                    counter += 1
-                if counter < len(queue):
-                    queue.insert(counter, [coordinates[0], coordinates[1] - 1, heur, Direction.NORTH, 1])
-                else:
-                    queue.append([coordinates[0], coordinates[1] - 1, heur, Direction.NORTH, 1])
-                    """North"""
-            checked.append([coordinates[0], coordinates[1] - 1])
-
-        """first nodes expanded"""
-        # print(node_depth," node level expanded:", queue)
-
-
-        """This is where the true a* part comes into play"""
-        while len(queue) > 0 and board[queue[0][0]][queue[0][1]] != GameObject.FOOD:
-            currentNode = queue.pop(0)
-            # print (currentNode)
-            # check the north:
-            if currentNode[1] - 1 >= 0 \
-                    and (board[currentNode[0]][currentNode[1] - 1] == GameObject.EMPTY
-                         or board[currentNode[0]][currentNode[1] - 1] == GameObject.FOOD) \
-                    and not checked.__contains__([currentNode[0], currentNode[1] - 1]):
-                checked.append([currentNode[0], currentNode[1] - 1])
-                # print(checked)
-                value = f([currentNode[0], currentNode[1] - 1], coordinates[2:4], currentNode[4])
-                counter = 0
-                while counter < len(queue) and value > queue[counter][2]:
-                    counter += 1
-                if counter < len(queue):
-                    queue.insert(counter,
-                                 [currentNode[0], currentNode[1] - 1, value, currentNode[3], currentNode[4] + 1])
-                else:
-                    queue.append([currentNode[0], currentNode[1] - 1, value, currentNode[3], currentNode[4] + 1])
-
-            # check the east
-            if currentNode[0] + 1 < len(board) \
-                    and (board[currentNode[0] + 1][currentNode[1]] == GameObject.EMPTY
-                         or board[currentNode[0] + 1][currentNode[1]] == GameObject.FOOD) \
-                    and not checked.__contains__([currentNode[0] + 1, currentNode[1]]):
-                checked.append([currentNode[0] + 1, currentNode[1]])
-                # print(checked)
-                value = f([currentNode[0] + 1, currentNode[1]], coordinates[2:4], currentNode[4])
-                counter = 0
-                while counter < len(queue) and value > queue[counter][2]:
-                    counter += 1
-                if counter < len(queue):
-                    queue.insert(counter,
-                                 [currentNode[0] + 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
-                else:
-                    queue.append([currentNode[0] + 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
-
-            # check the south
-            if currentNode[1] + 1 < len(board) \
-                    and (board[currentNode[0]][currentNode[1] + 1] == GameObject.EMPTY
-                         or board[currentNode[0]][currentNode[1] + 1] == GameObject.FOOD) \
-                    and not checked.__contains__([currentNode[0], currentNode[1] + 1]):
-                checked.append([currentNode[0], currentNode[1] + 1])
-                # print(checked)
-                value = f([currentNode[0], currentNode[1] + 1], coordinates[2:4], currentNode[4])
-                counter = 0
-                while counter < len(queue) and value > queue[counter][2]:
-                    counter += 1
-                if counter < len(queue):
-                    queue.insert(counter,
-                                 [currentNode[0], currentNode[1] + 1, value, currentNode[3], currentNode[4] + 1])
-                else:
-                    queue.append([currentNode[0], currentNode[1] + 1, value, currentNode[3], currentNode[4] + 1])
-
-            # check the west
-            if currentNode[0] - 1 >= 0 \
-                    and (board[currentNode[0] - 1][currentNode[1]] == GameObject.EMPTY
-                         or board[currentNode[0] - 1][currentNode[1]] == GameObject.FOOD) \
-                    and not checked.__contains__([currentNode[0] - 1, currentNode[1]]):
-                checked.append([currentNode[0] - 1, currentNode[1]])
-                # print(checked)
-                value = f([currentNode[0] - 1, currentNode[1]], coordinates[2:4], currentNode[4])
-                counter = 0
-                while counter < len(queue) and value > queue[counter][2]:
-                    counter += 1
-                if counter < len(queue):
-                    queue.insert(counter,
-                                 [currentNode[0] - 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
-                else:
-                    queue.append([currentNode[0] - 1, currentNode[1], value, currentNode[3], currentNode[4] + 1])
-
-        # print(queue)
-        global own_head
-        if len(queue) < 1:
-            # print("no availible nodes")
-            if own_head[1] > 1 and board[own_head[0]][own_head[1] - 1] == GameObject.EMPTY:
-                return Direction.NORTH
-            if own_head[1] + 1 < len(board) and board[own_head[0]][own_head[1] + 1] == GameObject.EMPTY:
-                return Direction.SOUTH
-            if own_head[0] > 1 and board[own_head[0] - 1][own_head[1]] == GameObject.EMPTY:
-                return Direction.WEST
-            if own_head[0] + 1 < len(board) and board[own_head[0] + 1][own_head[1]] == GameObject.EMPTY:
-                return Direction.EAST
-            return Direction.NORTH
-        return queue[0][3]
-
-def locate_food(board,indicator):
-    """here I determine where the nearest food is"""
-    snakex=0
-    snakey=0
-    foodx=[]
-    foody=[]
-    """find all food and the head of the snek"""
-    for x in range(len(board)):
-        for y in range(len(board)):
-            if board[x][y] == GameObject.SNAKE_HEAD:
-                snakex=x
-                snakey=y
-            if board[x][y] == GameObject.FOOD:
-                foodx.append(x)
-                foody.append(y)
-            y+=1
-        x+=1
-
-    """"find nearest food"""
-    distance = 9999
-    chosenfood=0
-    for i in range(len(foodx)):
-        curdistance = h([snakex,snakey],[foodx[i],foody[i]])
-        if curdistance < distance:
-            chosenfood=i
-            distance= curdistance
-
-    return [snakex,snakey,foodx[chosenfood],foody[chosenfood]]
-
-
-
-def h(node,goal):
-    """print("recieved node:",node[0],",",node[1],"\nand goal:",goal[0],",",goal[1])"""
-    total = abs(node[0]-goal[0])+abs(node[1]-goal[1])
-    """print( total)"""
-    return total
-def f(node,goal,previous_cost):
-    return h(node,goal)+previous_cost
-
-
+        average = sum(self.scores)/len(self.scores)
+        print("average: ", average)
+        self.scores.insert(0, 0)
